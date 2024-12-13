@@ -5,6 +5,25 @@ import fs from "fs";
 const CATEGORY_URL = "https://www.jomashop.com/watches.html";
 const PAGE_URL = "https://www.jomashop.com";
 
+async function autoScroll(page) {
+  await page.evaluate(async () => {
+    await new Promise((resolve) => {
+      let totalHeight = 0;
+      const distance = 100; // Khoảng cách cuộn mỗi lần
+      const timer = setInterval(() => {
+        const scrollHeight = document.body.scrollHeight;
+        window.scrollBy(0, distance);
+        totalHeight += distance;
+
+        if (totalHeight >= scrollHeight) {
+          clearInterval(timer);
+          resolve();
+        }
+      }, 100); // Thời gian chờ giữa mỗi lần cuộn
+    });
+  });
+}
+
 async function scrapeData() {
   const browser = await puppeteer.launch({ headless: true }); // Hiển thị trình duyệt
   const page = await browser.newPage();
@@ -15,7 +34,7 @@ async function scrapeData() {
   let currentPageUrl = CATEGORY_URL;
   let hasNextPage = true;
 
-  while (hasNextPage && products.length < 4 ) {
+  while (hasNextPage && products.length < 1) {
     // Lấy danh sách link sản phẩm từ trang danh mục
     const productLinks = await page.evaluate(() => {
       const productElements = document.querySelectorAll(".productItemBlock");
@@ -25,28 +44,34 @@ async function scrapeData() {
 
     console.log(`Tìm thấy ${productLinks.length} sản phẩm.`);
 
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 1; i++) {
       try {
         const productUrl = PAGE_URL + productLinks[i];
         console.log(`Đang crawl sản phẩm ${i + 1}/${productLinks.length}: ${productUrl}`);
 
         const productPage = await browser.newPage();
         await productPage.goto(productUrl, { waitUntil: "networkidle2" });
+        await autoScroll(productPage);
 
         const product = await productPage.evaluate((url) => {
           const productInfo = document.querySelector(".product-info-main");
+
           function extractNumbers(inputString) {
             if (!inputString) return null;
             const numbers = inputString.match(/\d+/g);
             return numbers ? numbers.join("") : "";
           }
+          
           const name = productInfo?.querySelector(".product-name")?.innerText || "Không có tên sản phẩm";
           const brand = productInfo.querySelector(".brand-name")?.innerText.trim() || "Không có dữ liệu thương hiệu";
           const sku = productInfo?.querySelector(".product-info-stock-sku")?.innerText || "Không có SKU";
           const description = productInfo.querySelector(".show-more-text-content")?.innerText || "Không có mô tả";
           const price = extractNumbers(productInfo?.querySelector(".now-price")?.innerText) || "Không có giá";
-          const salePrice = extractNumbers(productInfo?.querySelector(".was-wrapper")?.innerText) || "Không có giá sale";
-          const rating = extractNumbers(document.querySelector(".yotpo-display-wrapper a")?.innerText) || "Không có đánh giá";
+          const salePrice =
+            extractNumbers(productInfo?.querySelector(".was-wrapper")?.innerText) || "Không có giá sale";
+          const rating =
+            extractNumbers(document.querySelector(".yotpo-display-wrapper a")?.innerText) || "Không có đánh giá";
+          const avgRating =  document.querySelector(".avg-score.font-color-gray-darker")?.innerText || "Không có đánh giá trung bình";
           const images = [...document.querySelectorAll(".thumbs-items-wrapper.simple-slider-wrapper img")]
             .map((img) => img.getAttribute("src"))
             .join(", ");
@@ -59,6 +84,7 @@ async function scrapeData() {
             price,
             salePrice,
             rating,
+            avgRating,
             images,
             url,
           };
@@ -112,5 +138,3 @@ async function exportToExcel(data) {
     console.error("Lỗi trong quá trình crawl dữ liệu:", error);
   }
 })();
-
-
