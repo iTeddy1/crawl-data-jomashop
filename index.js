@@ -34,7 +34,7 @@ async function scrapeData() {
   let currentPageUrl = CATEGORY_URL;
   let hasNextPage = true;
 
-  while (hasNextPage && products.length < 1) {
+  while (hasNextPage && products.length < 500) {
     // Lấy danh sách link sản phẩm từ trang danh mục
     const productLinks = await page.evaluate(() => {
       const productElements = document.querySelectorAll(".productItemBlock");
@@ -44,7 +44,7 @@ async function scrapeData() {
 
     console.log(`Tìm thấy ${productLinks.length} sản phẩm.`);
 
-    for (let i = 0; i < 1; i++) {
+    for (let i = 0; i < productLinks.length; i++) {
       try {
         const productUrl = PAGE_URL + productLinks[i];
         console.log(`Đang crawl sản phẩm ${i + 1}/${productLinks.length}: ${productUrl}`);
