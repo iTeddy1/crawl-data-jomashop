@@ -24,6 +24,41 @@ async function autoScroll(page) {
   });
 }
 
+async function GTranslate(searchQuery) {
+  const browser = await puppeteer.launch({ headless: true });
+  const page = await browser.newPage();
+  // console.log(`Đang dịch: ${searchQuery}`);
+
+  try {
+    // Tạo URL bằng encodeURIComponent để đảm bảo độ chính xác
+    const translateUrl = `https://translate.google.com/?sl=en&tl=vi&text=${encodeURIComponent(
+      searchQuery,
+    )}&op=translate`;
+
+    // Điều hướng tới Google Translate
+    await page.goto(translateUrl, { waitUntil: "domcontentloaded" });
+
+    // Chờ các phần tử kết quả dịch xuất hiện
+    await page.waitForSelector(".ryNqvb", { timeout: 10000 });
+
+    // Lấy toàn bộ văn bản đã dịch
+    const result = await page.evaluate(() => {
+      const translationElements = document.querySelectorAll(".ryNqvb");
+      return Array.from(translationElements)
+        .map((el) => el.innerText.trim())
+        .join(" "); // Ghép lại thành một đoạn văn đầy đủ
+    });
+
+    // console.log(`Kết quả dịch: ${result}`);
+    return result || "Không thể dịch";
+  } catch (error) {
+    console.error("Lỗi khi dịch văn bản:", error);
+    return "Lỗi khi dịch";
+  } finally {
+    await browser.close();
+  }
+}
+
 async function scrapeData() {
   const browser = await puppeteer.launch({ headless: true }); // Hiển thị trình duyệt
   const page = await browser.newPage();
@@ -34,7 +69,7 @@ async function scrapeData() {
   let currentPageUrl = CATEGORY_URL;
   let hasNextPage = true;
 
-  while (hasNextPage && products.length < 500) {
+  while (hasNextPage && products.length < 100) {
     // Lấy danh sách link sản phẩm từ trang danh mục
     const productLinks = await page.evaluate(() => {
       const productElements = document.querySelectorAll(".productItemBlock");
@@ -53,42 +88,71 @@ async function scrapeData() {
         await productPage.goto(productUrl, { waitUntil: "networkidle2" });
         await autoScroll(productPage);
 
-        const product = await productPage.evaluate((url) => {
-          const productInfo = document.querySelector(".product-info-main");
+        const description = await productPage.evaluate(() => {
+          const descElement = document.querySelector(".show-more-text-content");
+          return descElement ? descElement.innerText : "Không có mô tả";
+        });
 
-          function extractNumbers(inputString) {
-            if (!inputString) return null;
-            const numbers = inputString.match(/\d+/g);
-            return numbers ? numbers.join("") : "";
-          }
-          
-          const name = productInfo?.querySelector(".product-name")?.innerText || "Không có tên sản phẩm";
-          const brand = productInfo.querySelector(".brand-name")?.innerText.trim() || "Không có dữ liệu thương hiệu";
-          const sku = productInfo?.querySelector(".product-info-stock-sku")?.innerText || "Không có SKU";
-          const description = productInfo.querySelector(".show-more-text-content")?.innerText || "Không có mô tả";
-          const price = extractNumbers(productInfo?.querySelector(".now-price")?.innerText) || "Không có giá";
-          const salePrice =
-            extractNumbers(productInfo?.querySelector(".was-wrapper")?.innerText) || "Không có giá sale";
-          const rating =
-            extractNumbers(document.querySelector(".yotpo-display-wrapper a")?.innerText) || "Không có đánh giá";
-          const avgRating =  document.querySelector(".avg-score.font-color-gray-darker")?.innerText || "Không có đánh giá trung bình";
-          const images = [...document.querySelectorAll(".thumbs-items-wrapper.simple-slider-wrapper img")]
-            .map((img) => img.getAttribute("src"))
-            .join(", ");
+        // Dịch description sang tiếng Việt
+        const translatedDescription = await GTranslate(description);
 
-          return {
-            name,
-            brand,
-            sku,
-            description,
-            price,
-            salePrice,
-            rating,
-            avgRating,
-            images,
-            url,
-          };
-        }, productUrl);
+        const product = await productPage.evaluate(
+          (url, translatedDescription) => {
+            const productInfo = document.querySelector(".product-info-main");
+
+            function extractNumbers(inputString) {
+              if (!inputString) return null;
+              const numbers = inputString.match(/\d+/g);
+              return numbers ? numbers.join("") : "";
+            }
+
+            const name = productInfo?.querySelector(".product-name")?.innerText || "Không có tên sản phẩm";
+            const brand = productInfo.querySelector(".brand-name")?.innerText.trim() || "Không có dữ liệu thương hiệu";
+            const price = extractNumbers(productInfo?.querySelector(".now-price")?.innerText) || "Không có giá";
+            const salePrice =
+              extractNumbers(productInfo?.querySelector(".was-wrapper")?.innerText) || "Không có giá sale";
+            const rating =
+              extractNumbers(document.querySelector(".yotpo-display-wrapper a")?.innerText) || "Không có đánh giá";
+            const avgRating =
+              document.querySelector(".avg-score.font-color-gray-darker")?.innerText || "Không có đánh giá trung bình";
+            const images = [...document.querySelectorAll(".thumbs-items-wrapper.simple-slider-wrapper img")]
+              .map((img) => img.getAttribute("src"))
+              .join(", ");
+
+            const additionalInfo = document.querySelectorAll(".more-detail-Row");
+            let sku = null;
+
+            additionalInfo.forEach((row) => {
+              const header = row.querySelector("h3");
+              if (header && header.textContent.trim() === "Additional Info") {
+                // Tìm phần tử chứa "Jomashop Sku"
+                const skuRow = Array.from(row.querySelectorAll(".more-detail-content")).find((content) => {
+                  const label = content.querySelector("h4");
+                  return label && label.textContent.trim() === "Jomashop Sku";
+                });
+
+                if (skuRow) {
+                  sku = skuRow.querySelector(".more-value")?.textContent.trim();
+                }
+              }
+            });
+
+            return {
+              name,
+              brand,
+              sku,
+              description: translatedDescription,
+              price,
+              salePrice,
+              rating,
+              avgRating,
+              images,
+              url,
+            };
+          },
+          productUrl,
+          translatedDescription,
+        );
 
         products.push(product);
 
