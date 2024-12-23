@@ -69,7 +69,7 @@ async function scrapeData() {
   let currentPageUrl = CATEGORY_URL;
   let hasNextPage = true;
 
-  while (hasNextPage && products.length < 100) {
+  while (hasNextPage && products.length < 500) {
     // Lấy danh sách link sản phẩm từ trang danh mục
     const productLinks = await page.evaluate(() => {
       const productElements = document.querySelectorAll(".productItemBlock");
