@@ -108,14 +108,18 @@ async function scrapeData() {
 
             const name = productInfo?.querySelector(".product-name")?.innerText || "Không có tên sản phẩm";
             const brand = productInfo.querySelector(".brand-name")?.innerText.trim() || "Không có dữ liệu thương hiệu";
-            const price = extractNumbers(productInfo?.querySelector(".now-price")?.innerText) || "Không có giá";
+            // turn price USD to VND
+            const exchangeRate = 25000;
             const salePrice =
-              extractNumbers(productInfo?.querySelector(".was-wrapper")?.innerText) || "Không có giá sale";
+              extractNumbers(productInfo?.querySelector(".now-price")?.innerText) * exchangeRate || "Không có giá";
+            const price =
+              extractNumbers(productInfo?.querySelector(".was-wrapper")?.innerText) * exchangeRate ||
+              "Không có giá sale";
             const rating =
               extractNumbers(document.querySelector(".yotpo-display-wrapper a")?.innerText) || "Không có đánh giá";
             const avgRating =
               document.querySelector(".avg-score.font-color-gray-darker")?.innerText || "Không có đánh giá trung bình";
-            const images = [...document.querySelectorAll(".thumbs-items-wrapper.simple-slider-wrapper img")]
+            const images = [...document.querySelectorAll(".slide-item-main-image")]
               .map((img) => img.getAttribute("src"))
               .join(", ");
 
@@ -139,15 +143,19 @@ async function scrapeData() {
 
             return {
               name,
-              brand,
+              "Danh mục": brand,
               sku,
               description: translatedDescription,
-              price,
-              salePrice,
+              "Giá thông thường": price,
+              "Giá khuyến mãi": salePrice,
               rating,
               avgRating,
               images,
               url,
+              weight: 0.4,
+              heigth: 60,
+              width: 60,
+              length: 60,
             };
           },
           productUrl,
